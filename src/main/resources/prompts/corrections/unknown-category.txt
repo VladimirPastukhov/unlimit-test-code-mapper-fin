@@ -1,0 +1,4 @@
+Your answer used a category that is not in the Decline Taxonomy ({{error}}).
+internal_category must be exactly one of these seven names:
+{{taxonomy}}
+Answer again with only the JSON object.

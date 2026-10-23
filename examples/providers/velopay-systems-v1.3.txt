@@ -1,0 +1,79 @@
+VeloPay Systems — Error Code Reference (v1.3)
+
+Every response carries a numeric `status_code` and a human-readable `status_text`.
+Codes are grouped by the component that produced them.
+
+=== Issuer Responses ===
+
+1001 "Issuer declined"
+    The issuing bank rejected the authorization request.
+    No reason code was returned by the issuer.
+
+1002 "Not enough funds"
+    The cardholder's available balance is below the requested amount.
+
+1003 "Card reported lost or stolen"
+    The card has been reported lost or stolen by its owner.
+    The issuer has permanently blocked it.
+
+1004 "Card restricted"
+    The issuer has placed a restriction on this card. Restrictions may be
+    geographic, merchant-category based, or the result of issuer risk rules.
+    The issuer does not say which one applies.
+
+1005 "Exceeds withdrawal frequency"
+    The cardholder has exceeded the number of transactions the issuer allows
+    for this card in the current period.
+
+1006 "Velocity check failed"
+    The VeloPay risk engine blocked the payment after too many attempts from
+    the same card or device within a short interval.
+
+=== Gateway ===
+
+2001 "Gateway error"
+    An unhandled exception occurred inside the VeloPay gateway.
+
+2002 "Acquirer unreachable"
+    VeloPay could not open a connection to the acquiring bank.
+
+2003 "Monthly volume cap reached"
+    The merchant has processed the full volume agreed in its contract for
+    the current calendar month.
+
+2004 "Unknown status"
+    The transaction outcome could not be determined. The payment may or may
+    not have been captured; query the status endpoint before taking action.
+
+=== Request Validation ===
+
+3001 "Malformed request body"
+    The request body is not valid JSON or does not match the API schema.
+
+3002 "Invalid IBAN"
+    The beneficiary IBAN has an invalid checksum or country prefix.
+
+3003 "Amount below minimum"
+    The amount is below the minimum allowed for the selected payment method.
+
+=== Access Control ===
+
+4001 "Missing Authorization header"
+    The request did not include an Authorization header.
+
+4002 "Merchant account suspended"
+    The merchant account has been suspended by VeloPay compliance.
+    Contact your account manager.
+
+4003 "HMAC mismatch"
+    The HMAC computed over the request body does not match the one supplied.
+
+=== Shopper Flow ===
+
+5001 "Shopper closed payment window"
+    The shopper closed the hosted payment window before confirming.
+
+5002 "Redirect not completed"
+    The shopper was redirected to the bank authentication page but never
+    returned. This happens when the shopper leaves, and also when the bank
+    page fails to load.

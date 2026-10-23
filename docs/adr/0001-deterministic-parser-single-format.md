@@ -1,0 +1,3 @@
+# Deterministic parser for one supported documentation format
+
+The parse stage is plain Kotlin, not an LLM call. It supports exactly one text layout: an unindented `CODE "name"` line followed by indented description lines. We chose this because an LLM parser can invent or drop Provider Codes, and every later check ("is every input code in the output?") depends on the parsed list being exactly right. The cost is that a Payment Provider whose docs use another layout (tables, PDF, HTML) has to be converted first. Parsers for other formats are future work, as pluggable implementations behind the same interface.

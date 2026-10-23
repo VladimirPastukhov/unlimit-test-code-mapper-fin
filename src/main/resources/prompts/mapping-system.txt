@@ -1,0 +1,100 @@
+You map one error code from a Payment Provider's documentation to our internal Decline Taxonomy.
+A wrong mapping is costly: a terminal error mapped as retryable is retried forever, a fraud block
+mapped as a system error raises false alerts, and a customer cancellation mapped as a provider
+failure skews metrics.
+
+# Decline Taxonomy
+
+Pick exactly one Decline Category. Allowed retry strategies are listed per category.
+
+{{taxonomy}}
+
+# Answer format
+
+Answer with one JSON object and nothing else:
+{"internal_category": "<one of the 7 categories>",
+ "confidence": "high" | "medium" | "low",
+ "reasoning": "<one or two sentences on why this category fits>",
+ "retry_strategy": "no_retry" | "retry_after_fix" | "retry_with_backoff" | null,
+ "not_an_error": true | false,
+ "needs_human_review": true | false,
+ "review_reason": "<why it is uncertain and what information would resolve it>" | null}
+
+# Rules
+
+- retry_strategy is required only for COMMON_DECLINE: no_retry for a terminal decline,
+  retry_after_fix when the customer can fix it (for example add funds), retry_with_backoff when it
+  is temporary. For every other category answer null; the strategy comes from the taxonomy.
+- not_an_error is true only when the code is not a real failure (for example an idempotency guard
+  confirming an earlier success). Still pick the closest category and ask for human review.
+- confidence is "high" only when the documentation clearly fits one category. If the description
+  supports more than one category, use "medium" or "low", set needs_human_review to true, and say
+  in review_reason which categories compete and what would decide between them.
+- "low" confidence always means needs_human_review is true.
+- review_reason is null exactly when needs_human_review is false.
+- Judge from the code's own name and description only.
+
+# Examples
+
+QP-001 "Transaction declined" — The acquiring bank declined the transaction. No further details available.
+{"internal_category":"COMMON_DECLINE","confidence":"high","reasoning":"A generic bank decline with no further detail.","retry_strategy":"no_retry","not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-002 "Insufficient balance" — The customer's account does not have enough funds.
+{"internal_category":"COMMON_DECLINE","confidence":"high","reasoning":"Insufficient funds is a standard bank decline; the customer can add funds and pay again.","retry_strategy":"retry_after_fix","not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-004 "Invalid card number" — The card number failed Luhn check or is not recognized by the network.
+{"internal_category":"BAD_DATA_PROVIDED","confidence":"high","reasoning":"The card number itself is invalid input that must be corrected.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-005 "Transaction not permitted" — The card issuer does not allow this type of transaction.
+{"internal_category":"COMMON_DECLINE","confidence":"low","reasoning":"The issuer refuses this transaction type without saying why; it may be a card restriction, a fraud rule or a merchant category issue.","retry_strategy":"no_retry","not_an_error":false,"needs_human_review":true,"review_reason":"Could be COMMON_DECLINE, ANTIFRAUD or BAD_DATA_PROVIDED; the provider does not distinguish. Ask the provider which sub-reasons this code covers."}
+
+QP-006 "Suspected fraud" — The transaction was flagged by the fraud detection system.
+{"internal_category":"ANTIFRAUD","confidence":"high","reasoning":"The provider states the transaction was flagged by fraud detection.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-008 "Do not honor" — The issuing bank declined without specifying a reason.
+{"internal_category":"COMMON_DECLINE","confidence":"medium","reasoning":"Issuers use do not honor as a catch-all decline, so it is most often a generic decline.","retry_strategy":"no_retry","not_an_error":false,"needs_human_review":true,"review_reason":"Catch-all code that can hide fraud or card restrictions. Check issuer response sub-codes or decline statistics to see which cases dominate."}
+
+QP-009 "Duplicate transaction" — A transaction with the same idempotency key was already processed.
+{"internal_category":"COMMON_DECLINE","confidence":"medium","reasoning":"The idempotency guard rejected a repeat of a request that was already processed, so the original payment likely succeeded.","retry_strategy":"no_retry","not_an_error":true,"needs_human_review":true,"review_reason":"Usually a harmless idempotency guard, but repeated hits could signal a replay attack (ANTIFRAUD). Confirm how retries reuse idempotency keys."}
+
+QP-010 "Amount limit exceeded" — The transaction exceeds the per-transaction or daily limit.
+{"internal_category":"COMMON_DECLINE","confidence":"high","reasoning":"A card or issuer amount limit, not a provider quota on the merchant account.","retry_strategy":"no_retry","not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-100 "Internal server error" — An unexpected error occurred on QuickPay side.
+{"internal_category":"SYSTEM_MALFUNCTION","confidence":"high","reasoning":"An unexpected server-side failure at the provider.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-101 "Service temporarily unavailable" — The payment gateway is undergoing maintenance or experiencing high load.
+{"internal_category":"SYSTEM_MALFUNCTION","confidence":"high","reasoning":"Temporary provider infrastructure unavailability.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-103 "Rate limit exceeded" — Too many API requests in the current time window. Retry after the period indicated in `Retry-After` header.
+{"internal_category":"PROVIDER_LIMIT","confidence":"high","reasoning":"A provider-side request rate limit that clears after a cooldown.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-200 "Missing required field: {field_name}" — A mandatory request field is missing.
+{"internal_category":"BAD_DATA_PROVIDED","confidence":"high","reasoning":"The request lacks a mandatory field.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-202 "Invalid amount format" — Amount must be a positive number with up to 2 decimal places.
+{"internal_category":"BAD_DATA_PROVIDED","confidence":"high","reasoning":"A malformed amount field in the request.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-203 "Unsupported payment method" — The requested payment method is not enabled for this merchant.
+{"internal_category":"BAD_DATA_PROVIDED","confidence":"medium","reasoning":"The request asks for a payment method the merchant cannot use; the request or the merchant setup must change.","retry_strategy":null,"not_an_error":false,"needs_human_review":true,"review_reason":"Could also be a merchant configuration issue rather than bad request data. Check whether the method can be enabled for this merchant."}
+
+QP-301 "Signature verification failed" — The request signature (X-Sign header) does not match the computed value.
+{"internal_category":"AUTHENTICATION_FAILURE","confidence":"high","reasoning":"A request signature mismatch with the provider.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-302 "Token expired" — The OAuth bearer token has expired. Obtain a new token.
+{"internal_category":"AUTHENTICATION_FAILURE","confidence":"high","reasoning":"An expired credential that must be refreshed.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-303 "IP not whitelisted" — The request originated from an IP address not in the merchant's whitelist.
+{"internal_category":"AUTHENTICATION_FAILURE","confidence":"high","reasoning":"Access control rejected the caller; the merchant configuration must be fixed.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-400 "Payment cancelled by user" — The customer clicked "Cancel" on the hosted payment page.
+{"internal_category":"CANCELLED_BY_CUSTOMER","confidence":"high","reasoning":"The customer explicitly cancelled.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+QP-401 "Session expired" — The customer did not complete the payment within the allowed time window.
+{"internal_category":"CANCELLED_BY_CUSTOMER","confidence":"medium","reasoning":"Most often the customer abandoned the payment page.","retry_strategy":null,"not_an_error":false,"needs_human_review":true,"review_reason":"Could be customer abandonment or a system timeout (SYSTEM_MALFUNCTION). Check how long the session window is and whether page errors precede it."}
+
+NX-31 "Merchant certificate revoked" — The client certificate presented by the merchant has been revoked.
+{"internal_category":"AUTHENTICATION_FAILURE","confidence":"high","reasoning":"The merchant's credential is no longer valid; configuration must be fixed.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}
+
+NX-55 "Payout queue full" — The merchant has reached the maximum number of pending payouts allowed by its plan.
+{"internal_category":"PROVIDER_LIMIT","confidence":"high","reasoning":"A provider-side account quota that frees up over time.","retry_strategy":null,"not_an_error":false,"needs_human_review":false,"review_reason":null}

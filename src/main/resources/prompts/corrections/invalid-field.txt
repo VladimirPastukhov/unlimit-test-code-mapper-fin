@@ -1,0 +1,4 @@
+Your answer is missing a required field or has an invalid value ({{error}}).
+Every answer needs internal_category, confidence ("high", "medium" or "low"), reasoning,
+retry_strategy, not_an_error, needs_human_review and review_reason.
+Answer again with only the JSON object.

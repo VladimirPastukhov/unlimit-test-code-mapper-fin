@@ -1,0 +1,3 @@
+# One LLM call per Provider Code
+
+The map stage sends one prompt per Provider Code instead of batching codes together. With one call per code, a failure, retry or Unmapped Code affects only that code, the prompt stays small and focused, and "missing codes" can't happen inside a response. The model also never sees neighbouring codes, so it has no cross-code context. That costs more calls (26 for QuickPay), offset by bounded concurrency (`concurrency`, default 4). The assignment's "missing codes" failure is still handled: after the run, any parsed code without a Mapping (for example because of a timeout or exception) is re-run, within the retry budget.

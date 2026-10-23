@@ -1,0 +1,4 @@
+Your answer has an invalid retry_strategy ({{error}}).
+For COMMON_DECLINE, retry_strategy must be one of no_retry, retry_after_fix or retry_with_backoff.
+For every other category it must be null. Use not_an_error for codes that are not real errors.
+Answer again with only the JSON object.
